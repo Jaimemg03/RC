@@ -59,120 +59,76 @@ def calcularError(distanciaIdealBaliza, distanciaRealBaliza):
   return
 
 def localizacion(balizas, real, ideal, centro, radio, mostrar=False):
-  # Buscar la localización más probable del robot, a partir de su sistema
-  # sensorial, dentro de una región cuadrada de centro "centro" y lado "2*radio".
+    """
+    Busca la localización más probable del robot usando búsqueda piramidal.
+    """
 
-  # NO LLAMAR NUNCA A REAL.pose
-  # TODO Tener en cuenta el parámetro centro y radio (centro = coordenadas Robot Ideal, radio = )
-  # TODO La precisión determina la division del entorno.
-  # TODO Almacenar la posición generada en una matriz Imagen (que contiene los errores de cada una 
-  # de las posiciones), almacenando el error minimo.
+    def error_en_punto(x, y):
+        # Posiciona el robot ideal en (x,y) con su orientación actual
+        ideal.set(x, y, ideal.orientation)
+        # Calcula el error absoluto entre la medición real y la ideal
+        sense_real = np.array(real.sense(balizas))
+        sense_ideal = np.array(ideal.sense(balizas))
+        return np.sum(np.abs(sense_real - sense_ideal))
 
-  # TODO Los pasos generales a seguir son los siguientes:
-  # Recorrer todos los puntos de la matriz desde r hasta r con incremento.
-  # Situo a mi robot ese punto y comparo distancia.
-  # Almaceno en imagen el error que me da.
-  # Situar al robot en la mejor posicion obtenida.
-  # Corregir la orientación mediante la funcion sensangel. Obtener la del real y asignarsela al ideal,
-  # se debe de usar la función y no asignarlo directamente para así introducir el ruido.
+    max_iter = 10          # Número máximo de iteraciones piramidales
+    min_radio = 0.01       # Radio mínimo para detener subdivisiones
 
-  # EJECUTAR UNA BUSQUEDA PIRAMIDAL
+    centro_actual = list(centro)
+    radio_actual = radio
+    mejor_pos = centro_actual
+    mejor_error = np.inf
 
-  ################################################################################
+    for _ in range(max_iter):
+        # Dividir la región en 4 sub-regiones y evaluar error en sus centros
+        radios_div = radio_actual / 2
+        candidatos = [
+            (centro_actual[0] - radios_div / 2, centro_actual[1] - radios_div / 2),
+            (centro_actual[0] - radios_div / 2, centro_actual[1] + radios_div / 2),
+            (centro_actual[0] + radios_div / 2, centro_actual[1] - radios_div / 2),
+            (centro_actual[0] + radios_div / 2, centro_actual[1] + radios_div / 2),
+        ]
 
-#  # La imagen que almacenará todos los errores dados para todos los puntos en el radio
-#  imagen = []
-#  # El error más pequeño encontrado que corresponde al punto más probable en el radio
-#  min_error = sys.maxsize
-#  # El punto más probable en el radio donde se encuentra el robot real
-#  best_point = []
-#  # Incremento para recorrer todo el radio
-#  increment = 0.05
-#  for j in np.arange(-radio, radio, increment):
-#      imagen.append([])
-#      for i in np.arange(-radio, radio, increment):
-#          # Obtenemos las componentes del punto actual
-#          x_component = centro[0] + i
-#          y_component = centro[1] + j
-#          # Movemos nuestro robot ideal al punto actual del radio
-#          ideal.set(x_component, y_component, ideal.orientation)
-#          # Comprobamos la diferencia entre las medidas que tiene el nuevo robot ideal
-#          # y las medidas del real.
-#          error = real.measurement_prob(ideal.sense(balizas), balizas)
-#          # Guardamos el nuevo error dado
-#          imagen[-1].append(error)
-#          # Si el nuevo error dado es mejor que nuestro error mínimo actual, actualizamos nuestro punto_mejor
-#          # y el valor del mejor error ya que significa que es más probable que nuestro robot esté
-#          # en el punto actual que estamos comprobando que en el último punto almacenadcleo.
-#          if (error < min_error):
-#              min_error = error
-#              best_point = [x_component, y_component]
-#  # Colocamos el robot ideal en el nuevo punto donde pensamos que está ahora el robot real.
-#  ideal.set(best_point[0], best_point[1], real.orientation)
-#  print("Mejor:", best_point, min_error)
+        # Evaluar errores en los centros de las sub-regiones
+        errores = []
+        for (x, y) in candidatos:
+            e = error_en_punto(x, y)
+            errores.append(e)
+            if e < mejor_error:
+                mejor_error = e
+                mejor_pos = [x, y]
 
-  PRECISION = 10 # La región será dividida en una matriz de tamaño nxn
-  imagen = [[0 for _ in range(PRECISION)] for _ in range(PRECISION)]
-  min_error = np.inf
-  mejor_pos = [0, 0]
-  nueva_pos = [centro[0] - radio, centro[1] + radio]
-  sense_real =  np.array(robot.sense(real, balizas))
-  for i  in range(0, 10):
-    for j in range(0, 10):
-      # Posicionar el robot real en la posición a explorar
-      robot.set(ideal, nueva_pos[0], nueva_pos[1], ideal.orientation)
-      sense_ideal = np.sum(robot.sense(ideal, balizas))
+        # Seleccionar sub-región con menor error para siguiente iteración
+        idx_mejor = errores.index(min(errores))
+        centro_actual = list(candidatos[idx_mejor])
+        radio_actual = radios_div
 
-      # ! La real no se puede modificar el que hay q tocar es el ideal, el ideal es el que debe de ir
-      # ! recorriendo todo el mapa buscando los errores.
-      # real.set(nueva_pos[0], nueva_pos[1], real.orientation)
+        if radio_actual < min_radio:
+            break
 
-      # Comparar la distancia a las balizas del real y del ideal almacenandolo en la matriz imagen
-      imagen[i][j] = np.sum(np.abs(sense_real - sense_ideal))
-      #input("Pulsa Enter para continuar...")
-      # Calcular el error total del punto analizado para compararlo con el mejor encontrado
-      if imagen[i][j] < min_error:
-        # Si se encuentra un punto con un error menor actualizar:
-        #   * La mejor posición encontrada
-        #   * El error mínimo encontrado
-        mejor_pos = [nueva_pos[0], nueva_pos[1]]
-        min_error = imagen[i][j]
-      nueva_pos[0] += 1
-    nueva_pos[1] += 1
-  # Corregir el robot real a la mejor posición encontrada, calculando la nueva
-  # orientación mediante el método sensangel
-  robot.set(ideal, mejor_pos[0], mejor_pos[1], robot.senseAngle(real, balizas))
-  # print("Mínimo error encontrado:\n")
-  # print(min_error)
-  # print("\nEn la posición:\n")
-  # print(mejor_pos)
-  #input("Pulsa Enter para continuar...")
-  #print("\nMatriz posiciones errores:")
-  #print(pos_error)
-  #print("\nMatriz imagen:")
-  #print(imagen)
+    # Finalmente, situar el robot ideal en la mejor posición encontrada
+    # Ajustar orientación usando sensAngle para introducir ruido
+    nueva_orientacion = robot.senseAngle(real, balizas)
+    ideal.set(mejor_pos[0], mejor_pos[1], nueva_orientacion)
 
-  ################################################################################
+    if mostrar:
+        # Mostrar la zona de búsqueda y los balizas
+        plt.figure('Localización Piramidal')
+        plt.clf()
+        plt.ion()
+        plt.xlim(centro[0] - radio, centro[0] + radio)
+        plt.ylim(centro[1] - radio, centro[1] + radio)
+        balT = np.array(balizas).T.tolist()
+        plt.plot(balT[0], balT[1], 'or', ms=10)
+        plt.plot(mejor_pos[0], mejor_pos[1], 'D', c='#ff00ff', ms=10, mew=2)
+        plt.plot(real.x, real.y, 'D', c='#00ff00', ms=10, mew=2)
+        plt.show()
 
-  if mostrar:
-    plt.figure('Localizacion')
-    plt.clf()
-    plt.ion() # modo interactivo
-    plt.xlim(centro[0]-radio,centro[0]+radio)
-    plt.ylim(centro[1]-radio,centro[1]+radio)
-    imagen.reverse()
-    plt.imshow(imagen,extent=[centro[0]-radio,centro[0]+radio,\
-                              centro[1]-radio,centro[1]+radio])
-    balT = np.array(balizas).T.tolist();
-    plt.plot(balT[0],balT[1],'or',ms=10)
-    plt.plot(ideal.x,ideal.y,'D',c='#ff00ff',ms=10,mew=2)
-    plt.plot(real.x, real.y, 'D',c='#00ff00',ms=10,mew=2)
-    plt.show()
 
 # ******************************************************************************
 
 # Definición del robot:
-P_INICIAL = [0.,4.,0.] # Pose inicial (posición y orientacion)
+P_INICIAL = [1.,2.,0.] # Pose inicial (posición y orientacion)
 P_INICIAL_IDEAL = [2, 2, 0]  # Pose inicial del ideal
 V_LINEAL  = .7         # Velocidad lineal    (m/s)
 V_ANGULAR = 140.       # Velocidad angular   (º/s)
@@ -255,7 +211,7 @@ for punto in objetivos:
 
     ########################################################################
     if (real.measurement_prob(ideal.sense(objetivos), objetivos) > EPSILON):
-      localizacion(objetivos, real, ideal, ideal.pose(), 0.5, 0)
+      localizacion(objetivos, real, ideal, ideal.pose(), 1.5, 0)
       #input("Pulsa Enter para continuar...")
     ########################################################################
 

@@ -48,6 +48,14 @@ class robot:
     # Calcular la distancia a una de las balizas
     return np.linalg.norm(np.subtract([self.x,self.y],landmark)) \
                                         + random.gauss(0.,noise)
+  
+  ########################################################################
+  def sense(self, landmarks):
+    # Calcular las distancias a cada una de las balizas
+    d = [self.sense1(l,self.sense_noise) for l in landmarks]
+    d.append(self.orientation + random.gauss(0.,self.sense_noise))
+    return d
+  ########################################################################
 
   def senseDistance(self, landmarks):
     # Calcular las distancias a cada una de las balizas
@@ -76,6 +84,22 @@ class robot:
     while self.orientation < -pi: self.orientation += 2*pi
     self.x += cos(self.orientation) * dist
     self.y += sin(self.orientation) * dist
+
+  ########################################################################
+  def measurement_prob(self, measurements, landmarks):
+    # Calcular la probabilidad de una medida.
+    self.weight = 0.
+    n=0
+    for i in range(len(measurements)-1):
+      self.weight += abs(self.sense1(landmarks[i],0) -measurements[i])
+      n=n+1
+    diff = self.orientation - measurements[-1]
+    while diff >  pi: diff -= 2*pi
+    while diff < -pi: diff += 2*pi
+    self.weight = self.weight + abs(diff) 
+    self.weight=self.weight/(n+1)
+    return self.weight
+  ########################################################################
 
   def __repr__(self):
     # Representación de la clase robot
