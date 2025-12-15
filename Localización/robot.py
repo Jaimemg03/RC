@@ -85,22 +85,6 @@ class robot:
     self.x += cos(self.orientation) * dist
     self.y += sin(self.orientation) * dist
 
-  ########################################################################
-  def measurement_prob(self, measurements, landmarks):
-    # Calcular la probabilidad de una medida.
-    self.weight = 0.
-    n=0
-    for i in range(len(measurements)-1):
-      self.weight += abs(self.sense1(landmarks[i],0) -measurements[i])
-      n=n+1
-    diff = self.orientation - measurements[-1]
-    while diff >  pi: diff -= 2*pi
-    while diff < -pi: diff += 2*pi
-    self.weight = self.weight + abs(diff) 
-    self.weight=self.weight/(n+1)
-    return self.weight
-  ########################################################################
-
   def __repr__(self):
     # Representación de la clase robot
     return f'[x={self.x:.6f} y={self.y:.6f} orient={self.orientation:.6f}]'

@@ -56,9 +56,19 @@ def mostrar(objetivos,ideal,trayectoria):
   plt.show()
 
 def localizacion(balizas, real, ideal, centro, radio, min_radio=0.1, mostrar=False):
-    """
-    Busca la localización más probable del robot usando búsqueda piramidal.
-    """
+    # Definición de una matriz imagen en la que se almacenan los errores
+    # en cada subdivisión por la busqueda piramidal
+    res = 0.1               # Tamaño de los puntos de calor en la matriz imagen
+    xs = np.arange(centro[0] - radio, centro[0] + radio, res)
+    ys = np.arange(centro[1] - radio, centro[1] + radio, res)
+
+    imagen = np.full((len(ys), len(xs)), np.nan)
+
+    def guardar_error(x, y, e):
+        j = int((x - xs[0]) / res)
+        i = int((y - ys[0]) / res)
+        if 0 <= i < imagen.shape[0] and 0 <= j < imagen.shape[1]:
+            imagen[i, j] = e
 
     def error_en_punto(x, y):
         # Posiciona el robot ideal en (x,y) con su orientación actual
@@ -70,7 +80,7 @@ def localizacion(balizas, real, ideal, centro, radio, min_radio=0.1, mostrar=Fal
 
     max_iter = 40          # Número máximo de iteraciones piramidales
 
-    centro_actual = list(centro)
+    centro_actual = list(centro[:2])
     radio_actual = radio
     mejor_pos = centro_actual
     mejor_error = np.inf
@@ -90,22 +100,20 @@ def localizacion(balizas, real, ideal, centro, radio, min_radio=0.1, mostrar=Fal
         for (x, y) in candidatos:
             e = error_en_punto(x, y)
             errores.append(e)
+            guardar_error(x, y, e)
             if e < mejor_error:
                 mejor_error = e
                 mejor_pos = [x, y]
-
         # Seleccionar sub-región con menor error para siguiente iteración
-        idx_mejor = errores.index(min(errores))
-        centro_actual = list(candidatos[idx_mejor])
+        centro_actual = list(candidatos[errores.index(min(errores))])
         radio_actual = radios_div
 
         if radio_actual < min_radio:
             break
 
     # Finalmente, situar el robot ideal en la mejor posición encontrada
-    # Ajustar orientación usando sensAngle para introducir ruido
-    nueva_orientacion = real.senseAngle(balizas)
-    ideal.set(mejor_pos[0], mejor_pos[1], nueva_orientacion)
+    # ajustando la orientación usando sensAngle para introducir ruido
+    ideal.set(mejor_pos[0], mejor_pos[1], real.senseAngle(balizas))
 
     if mostrar:
         # Mostrar la zona de búsqueda y los balizas
@@ -119,17 +127,31 @@ def localizacion(balizas, real, ideal, centro, radio, min_radio=0.1, mostrar=Fal
         plt.plot(mejor_pos[0], mejor_pos[1], 'D', c='#ff00ff', ms=10, mew=2)
         plt.plot(real.x, real.y, 'D', c='#00ff00', ms=10, mew=2)
         plt.show()
+        # Mostrar los puntos de calor con el error de la búsqueda
+        plt.figure('Mapa de calor (piramidal)')
+        plt.imshow(
+            imagen,
+            extent=[xs[0], xs[-1], ys[0], ys[-1]],
+            origin='lower'
+        )
+        plt.colorbar(label='Error')
+        plt.plot(mejor_pos[0], mejor_pos[1], 'mx', ms=12, mew=2)
+        plt.plot(real.x, real.y, 'gx', ms=12, mew=2)
+        balT = np.array(balizas).T
+        plt.plot(balT[0], balT[1], 'or')
+        plt.title('Errores evaluados por búsqueda piramidal')
+        plt.show()
 
 
 # ******************************************************************************
 
 # Definición del robot:
-P_INICIAL = [0.,4.,0.] # Pose inicial (posición y orientacion)
-P_INICIAL_IDEAL = [2, 2, 0]  # Pose inicial del ideal
-V_LINEAL  = .7         # Velocidad lineal    (m/s)
-V_ANGULAR = 140.       # Velocidad angular   (º/s)
-FPS       = 10.        # Resolución temporal (fps)
-MOSTRAR   = False       # Si se quiere gráficas de localización y trayectorias
+P_INICIAL = [0.,4.,0.]          # Pose inicial (posición y orientacion)
+P_INICIAL_IDEAL = [2, 2, 0]     # Pose inicial del ideal
+V_LINEAL  = .7                  # Velocidad lineal    (m/s)
+V_ANGULAR = 140.                # Velocidad angular   (º/s)
+FPS       = 10.                 # Resolución temporal (fps)
+MOSTRAR   = True               # Si se quiere gráficas de localización y trayectorias
 
 HOLONOMICO = 1
 GIROPARADO = 0
@@ -150,20 +172,20 @@ if len(sys.argv)<2 or int(sys.argv[1])<0 or int(sys.argv[1])>=len(trayectorias):
 objetivos = trayectorias[int(sys.argv[1])]
 
 # Definición de constantes:
-EPSILON = .1                # Umbral de distancia
-V = V_LINEAL/FPS            # Metros por fotograma
-W = V_ANGULAR*pi/(180*FPS)  # Radianes por fotograma
+EPSILON = .1                    # Umbral de distancia
+V = V_LINEAL/FPS                # Metros por fotograma
+W = V_ANGULAR*pi/(180*FPS)      # Radianes por fotograma
 
 ideal = robot()
-ideal.set_noise(0,0,0)   # Ruido lineal / radial / de sensado
+ideal.set_noise(0,0,0)          # Ruido lineal / radial / de sensado
 ideal.set(*P_INICIAL_IDEAL)     # operador 'splat'
 
 real = robot()
-real.set_noise(.01,.01,.1)  # Ruido lineal / radial / de sensado // avance / giro /
+real.set_noise(.01,.01,.1)      # Ruido lineal / radial / de sensado // avance / giro /
 real.set(*P_INICIAL)
 
 random.seed(0)
-tray_real = [real.pose()]     # Trayectoria seguida
+tray_real = [real.pose()]       # Trayectoria seguida
 
 tiempo  = 0.
 espacio = 0.
@@ -171,15 +193,11 @@ espacio = 0.
 random.seed(time.time())
 tic = time.time()
 
-# Localización inicial
-
-localizacion(objetivos, real, ideal, ideal.pose(), 5, 0)
-
+# Localización inicial más costosa
 ########################################################################
-
+localizacion(objetivos, real, ideal, ideal.pose(), 5, 0.1, MOSTRAR)
 ########################################################################
-
-tray_ideal = [ideal.pose()]  # Trayectoria percibida
+tray_ideal = [ideal.pose()]     # Trayectoria percibida
 
 distanciaObjetivos = []
 for punto in objetivos:
@@ -203,10 +221,9 @@ for punto in objetivos:
       real.move_triciclo(w,v,LONGITUD)
     tray_real.append(real.pose())
     tray_ideal.append(ideal.pose())
-    # TODO Comprobar si el error medio de las distancias de las balizas superan un umbral o no
-    # TODO Si supera el humbral de localiza -> localizar()
-    # Decidir nueva localización ⇒ nuevo ideal
 
+    # Comprobar si el error medio de las distancias de las balizas superan un umbral o no
+    # si supera el humbral se localiza empleando la función localizar()
     ########################################################################
     d_real = real.senseDistance(objetivos)
     d_ideal = ideal.senseDistance(objetivos)
@@ -215,24 +232,20 @@ for punto in objetivos:
     error_actual = sum(errores) / len(objetivos)
     
     if error_actual > 0.15:
-        print('----------------')
-        print(f'Error detectado: {error_actual:.4f}')
-        # Llamada piramidal con radio más pequeño (re-enganche)
-        localizacion(objetivos, real, ideal, ideal.pose(), 0.3, 0)
-        print(f'Robot ideal corregido: {ideal.pose()}')
+      localizacion(objetivos, real, ideal, ideal.pose(), 0.3, 0.1, MOSTRAR)
     ########################################################################
 
     if MOSTRAR:
-      mostrar(objetivos, tray_ideal, tray_real)  # Representación gráfica
-      input() # Pausa para ver la gráfica
+      mostrar(objetivos, tray_ideal, tray_real)   # Representación gráfica
+      input()                                     # Pausa para ver la gráfica
 
     espacio += v
     tiempo  += 1
   # Antes de pasar a un nuevo punto apuntamos distancia a este objetivo
   distanciaObjetivos.append(distancia(tray_real[-1], punto))
 
-
 toc = time.time()
+
 # --- ESTADÍSTICAS FINALES (Requerimiento del código nuevo) ---
 if len(tray_ideal) > 1000:
   print ("<!> Trayectoria muy larga ⇒ quizás no alcanzada posición final.")
