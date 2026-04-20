@@ -33,9 +33,9 @@ def muestra_robot(O,obj):
     plt.plot(T[i][0], T[i][1], '-o', color=cs.hsv_to_rgb(i/float(len(T)),1,1))
   plt.plot(obj[0], obj[1], '*')
   plt.pause(0.0001)
-  plt.show()
+  # plt.show()
   
-#  input()
+  input()
   plt.close()
 
 def matriz_T(d,th,a,al):
@@ -66,9 +66,9 @@ def to_radian(angel):
 # valores articulares arbitrarios para la cinemática directa inicial
 th=[0.,0.,0.]
 a =[0.,5.,5.]
-tipo_articulacion = [0, 1, 0] # 0 = rotacion, 1 = prismática
-limite_sup = [to_radian(90), 10, to_radian(90)]
-limite_inf = [to_radian(-90), 0, to_radian(-90)]
+tipo_articulacion = [0, 0, 1] # 0 = rotacion, 1 = prismática
+limite_sup = [to_radian(90), to_radian(90), 20]
+limite_inf = [to_radian(-90), to_radian(-90), 0]
 
 L = sum(a) # variable para representación gráfica
 EPSILON = .01
